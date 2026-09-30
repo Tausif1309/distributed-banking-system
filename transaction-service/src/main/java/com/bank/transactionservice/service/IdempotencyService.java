@@ -6,9 +6,9 @@ public interface IdempotencyService {
 
     TransferResponse get(String key);
 
-    boolean acquireLock(String key);
+    String acquireLock(String key);
+
+    void releaseLock(String key, String lockToken);
 
     void save(String key, TransferResponse response);
-
-    void delete(String key);
 }

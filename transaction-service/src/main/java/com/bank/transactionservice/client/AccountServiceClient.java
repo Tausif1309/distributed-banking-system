@@ -24,6 +24,7 @@ public class AccountServiceClient {
     private String internalServiceToken;
 
     public AccountTransferResponse transfer(
+            String transferReference,
             Long senderUserId,
             Long receiverUserId,
             BigDecimal amount) {
@@ -31,6 +32,7 @@ public class AccountServiceClient {
         AccountTransferRequest request =
                 new AccountTransferRequest();
 
+        request.setTransferReference(transferReference);
         request.setSenderUserId(senderUserId);
         request.setReceiverUserId(receiverUserId);
         request.setAmount(amount);

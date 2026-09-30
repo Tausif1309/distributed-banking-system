@@ -11,10 +11,14 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class AccountTransferResponse {
 
+    private String transferReference;
+
     private Long senderUserId;
+
     private Long receiverUserId;
 
     private BigDecimal senderBalance;
+
     private BigDecimal receiverBalance;
 
     private String currency;

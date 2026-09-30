@@ -1,0 +1,143 @@
+
+/* USER DASHBOARD */
+
+#accountBalance {
+    color: #19c994;
+    font-size: 32px;
+    margin: 15px 0;
+}
+
+#changeField {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    background: #0b1726;
+    border: 1px solid #26364a;
+    border-radius: 6px;
+    color: white;
+}
+
+#transferForm button,
+#changeRequestForm button {
+    background: #19c994;
+    color: #08111f;
+    border: none;
+    padding: 11px 18px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+#transferForm button:hover,
+#changeRequestForm button:hover {
+    opacity: 0.85;
+}
+
+
+/* Profile Change Request */
+
+.profile-card {
+    margin-top: 25px;
+    padding: 25px;
+    background: #0f1d31;
+    border: 1px solid #263b55;
+    border-radius: 12px;
+    overflow-x: auto;
+}
+
+.profile-card h2 {
+    margin-bottom: 20px;
+    font-size: 24px;
+    color: #f1f5f9;
+}
+
+.profile-card form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.profile-card label {
+    color: #e2e8f0;
+    font-size: 15px;
+    font-weight: 500;
+}
+
+.profile-card select,
+.profile-card input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    background: #0b1728;
+    color: #f1f5f9;
+    border: 1px solid #334155;
+    border-radius: 7px;
+    font-size: 15px;
+    outline: none;
+}
+
+.profile-card select:focus,
+.profile-card input:focus {
+    border-color: #14b8a6;
+}
+
+.profile-card button {
+    width: fit-content;
+    padding: 12px 22px;
+    margin-top: 8px;
+    background: #10b981;
+    color: #061b18;
+    border: none;
+    border-radius: 7px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.profile-card button:hover {
+    background: #34d399;
+}
+
+#changeRequestMessage {
+    margin-top: 8px;
+    font-size: 14px;
+    color: #34d399;
+}
+
+/* Change Request History Table */
+
+.profile-card table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    min-width: 550px;
+}
+
+.profile-card th,
+.profile-card td {
+    padding: 14px 16px;
+    text-align: left;
+    border-bottom: 1px solid #263b55;
+    color: #e2e8f0;
+    white-space: nowrap;
+}
+
+.profile-card th {
+    background: #172941;
+    color: #5eead4;
+    font-weight: 600;
+}
+
+.profile-card tbody tr:hover {
+    background: #172941;
+}
+
+@media (max-width: 600px) {
+    .profile-card {
+        padding: 16px;
+    }
+
+    .profile-card h2 {
+        font-size: 20px;
+    }
+}

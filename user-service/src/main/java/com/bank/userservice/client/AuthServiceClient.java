@@ -64,4 +64,40 @@ public class AuthServiceClient {
                 .retrieve()
                 .toBodilessEntity();
     }
+
+    public void updateCredentialStatus(
+            Long userId,
+            String status) {
+
+        ServletRequestAttributes attributes =
+                (ServletRequestAttributes)
+                        RequestContextHolder.getRequestAttributes();
+
+        if (attributes == null) {
+            throw new IllegalStateException(
+                    "No current HTTP request available"
+            );
+        }
+
+        String authorizationHeader =
+                attributes.getRequest()
+                        .getHeader(HttpHeaders.AUTHORIZATION);
+
+        if (authorizationHeader == null ||
+                authorizationHeader.isBlank()) {
+
+            throw new IllegalStateException(
+                    "Authorization header is missing"
+            );
+        }
+
+        restClient
+                .put()
+                .uri(authServiceUrl +
+                        "/api/v1/auth/credentials/" + userId + "/status")
+                .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                .body(java.util.Map.of("status", status))
+                .retrieve()
+                .toBodilessEntity();
+    }
 }

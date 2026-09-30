@@ -150,4 +150,48 @@ public class UserServiceImpl implements UserService {
 
         return userMapper.toResponse(updatedUser);
     }
+
+    @Override
+    @Transactional
+    public UserResponse deactivateUser(Long userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "User not found with id: " + userId
+                        ));
+
+        if (user.getStatus() == UserStatus.DISABLED) {
+            throw new IllegalStateException("User is already disabled");
+        }
+
+        authServiceClient.updateCredentialStatus(userId, "DISABLED");
+
+        user.setStatus(UserStatus.DISABLED);
+        user.setUpdatedAt(LocalDateTime.now());
+
+        return userMapper.toResponse(userRepository.save(user));
+    }
+
+    @Override
+    @Transactional
+    public UserResponse activateUser(Long userId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "User not found with id: " + userId
+                        ));
+
+        if (user.getStatus() == UserStatus.ACTIVE) {
+            throw new IllegalStateException("User is already active");
+        }
+
+        authServiceClient.updateCredentialStatus(userId, "ACTIVE");
+
+        user.setStatus(UserStatus.ACTIVE);
+        user.setUpdatedAt(LocalDateTime.now());
+
+        return userMapper.toResponse(userRepository.save(user));
+    }
 }

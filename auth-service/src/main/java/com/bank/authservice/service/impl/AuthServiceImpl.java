@@ -75,4 +75,22 @@ public class AuthServiceImpl implements AuthService {
 
         authCredentialRepository.save(credential);
     }
+
+    @Override
+    public void updateCredentialStatus(
+            Long userId,
+            AccountStatus status) {
+
+        AuthCredential credential = authCredentialRepository
+                .findByUserId(userId)
+                .orElseThrow(() ->
+                        new InvalidCredentialsException(
+                                "Credentials not found for user: " + userId
+                        ));
+
+        credential.setStatus(status);
+        credential.setUpdatedAt(LocalDateTime.now());
+
+        authCredentialRepository.save(credential);
+    }
 }

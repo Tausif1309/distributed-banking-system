@@ -1,0 +1,129 @@
+
+
+/* ADMIN DASHBOARD */
+
+.dashboard {
+    max-width: 1100px;
+    margin: 30px auto;
+    padding: 20px;
+}
+
+.dashboard h1 {
+    color: #19c994;
+    margin-bottom: 25px;
+}
+
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+}
+
+.logout-button {
+    background: #ff6b78;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+}
+
+.dashboard-section {
+    background: #101d2e;
+    border: 1px solid #26364a;
+    border-radius: 10px;
+    padding: 22px;
+    margin-bottom: 25px;
+}
+
+.dashboard-section h2 {
+    margin-bottom: 20px;
+    font-size: 20px;
+}
+
+.dashboard-section label {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 13px;
+}
+
+.dashboard-section input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    background: #0b1726;
+    border: 1px solid #26364a;
+    border-radius: 6px;
+    color: white;
+}
+
+.dashboard-section button {
+    background: #19c994;
+    color: #08111f;
+    border: none;
+    padding: 11px 18px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.dashboard-section table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.dashboard-section th,
+.dashboard-section td {
+    padding: 13px;
+    border-bottom: 1px solid #26364a;
+    font-size: 13px;
+}
+
+.dashboard-section th {
+    color: #19c994;
+}
+
+@media (max-width: 600px) {
+    .dashboard {
+        padding: 12px;
+    }
+
+    .dashboard-section {
+        overflow-x: auto;
+    }
+
+    .dashboard-section table {
+        min-width: 550px;
+    }
+}
+
+
+.approve-button {
+    background: #10b981;
+    color: #06251c;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: 8px;
+    font-weight: 600;
+}
+
+.reject-button {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.approve-button:hover {
+    background: #34d399;
+}
+
+.reject-button:hover {
+    background: #f87171;
+}

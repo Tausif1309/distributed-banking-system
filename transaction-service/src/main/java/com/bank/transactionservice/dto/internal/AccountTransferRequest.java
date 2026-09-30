@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 @Setter
 public class AccountTransferRequest {
 
+    private String transferReference;
+
     private Long senderUserId;
 
     private Long receiverUserId;

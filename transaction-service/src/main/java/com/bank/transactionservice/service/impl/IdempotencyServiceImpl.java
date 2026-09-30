@@ -4,81 +4,76 @@ import com.bank.transactionservice.dto.response.TransferResponse;
 import com.bank.transactionservice.service.IdempotencyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class IdempotencyServiceImpl
-        implements IdempotencyService {
+public class IdempotencyServiceImpl implements IdempotencyService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final StringRedisTemplate stringRedisTemplate;
 
-    private static final Duration TTL =
-            Duration.ofHours(24);
+    private static final Duration TTL = Duration.ofHours(24);
+    private static final Duration LOCK_TTL = Duration.ofMinutes(2);
 
-    private static final Duration LOCK_TTL =
-            Duration.ofMinutes(2);
-
+    private static final String LOCK_PREFIX = "idempotency-lock:";
 
     @Override
     public TransferResponse get(String key) {
 
-        Object value =
-                redisTemplate
-                        .opsForValue()
-                        .get(key);
+        Object value = redisTemplate.opsForValue().get(key);
 
         if (value == null) {
             return null;
         }
 
-        if (value instanceof String &&
-                value.equals("PROCESSING")) {
-
-            throw new IllegalStateException(
-                    "A transfer with this Idempotency-Key is already being processed"
-            );
-        }
-
         return (TransferResponse) value;
     }
 
-
     @Override
-    public void delete(String key) {
+    public String acquireLock(String key) {
 
-        redisTemplate.delete(key);
-    }
+        String lockKey = LOCK_PREFIX + key;
 
-    @Override
-    public boolean acquireLock(String key) {
+        String lockToken = UUID.randomUUID().toString();
 
         Boolean acquired =
-                redisTemplate
-                        .opsForValue()
-                        .setIfAbsent(
-                                key,
-                                "PROCESSING",
-                                LOCK_TTL
-                        );
+                stringRedisTemplate.opsForValue()
+                        .setIfAbsent(lockKey, lockToken, LOCK_TTL);
 
-        return Boolean.TRUE.equals(acquired);
+        return Boolean.TRUE.equals(acquired) ? lockToken : null;
     }
 
+    @Override
+    public void releaseLock(String key, String lockToken) {
+
+        String lockKey = LOCK_PREFIX + key;
+
+        String luaScript =
+                "if redis.call('get', KEYS[1]) == ARGV[1] " +
+                        "then return redis.call('del', KEYS[1]) " +
+                        "else return 0 end";
+
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+        script.setScriptText(luaScript);
+        script.setResultType(Long.class);
+
+        stringRedisTemplate.execute(
+                script,
+                List.of(lockKey),
+                lockToken
+        );
+    }
 
     @Override
-    public void save(
-            String key,
-            TransferResponse response) {
+    public void save(String key, TransferResponse response) {
 
-        redisTemplate
-                .opsForValue()
-                .set(
-                        key,
-                        response,
-                        TTL
-                );
+        redisTemplate.opsForValue().set(key, response, TTL);
     }
 }

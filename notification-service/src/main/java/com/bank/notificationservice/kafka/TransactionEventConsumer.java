@@ -1,9 +1,12 @@
+
 package com.bank.notificationservice.kafka;
 
 import com.bank.notificationservice.dto.event.TransactionCompletedEvent;
 import com.bank.notificationservice.entity.Notification;
 import com.bank.notificationservice.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.ObjectMapper;
@@ -12,6 +15,7 @@ import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TransactionEventConsumer {
 
     private final NotificationRepository notificationRepository;
@@ -24,45 +28,48 @@ public class TransactionEventConsumer {
     public void consumeTransactionCompleted(String message) {
 
         try {
-
             TransactionCompletedEvent event =
                     objectMapper.readValue(
                             message,
                             TransactionCompletedEvent.class
                     );
 
-            System.out.println(
-                    "Received transaction event: "
-                            + event.getReferenceId()
-            );
+            if (event.getTransactionId() == null
+                    || event.getReceiverUserId() == null
+                    || event.getSenderUserId() == null
+                    || event.getAmount() == null
+                    || event.getCurrency() == null
+                    || event.getReferenceId() == null) {
 
-            Long receiverUserId =
-                    event.getReceiverUserId();
+                throw new IllegalArgumentException(
+                        "Transaction event contains missing required fields"
+                );
+            }
 
+            Long transactionId = event.getTransactionId();
+            Long receiverUserId = event.getReceiverUserId();
             String type = "MONEY_RECEIVED";
 
             boolean alreadyExists =
                     notificationRepository
                             .existsByTransactionIdAndUserIdAndType(
-                                    event.getTransactionId(),
+                                    transactionId,
                                     receiverUserId,
                                     type
                             );
 
             if (alreadyExists) {
-
-                System.out.println(
-                        "Notification already exists for transaction: "
-                                + event.getTransactionId()
+                log.info(
+                        "Duplicate notification skipped for transaction {}",
+                        transactionId
                 );
-
                 return;
             }
 
             Notification notification =
                     Notification.builder()
                             .userId(receiverUserId)
-                            .transactionId(event.getTransactionId())
+                            .transactionId(transactionId)
                             .type(type)
                             .title("Money Received")
                             .message(
@@ -77,23 +84,49 @@ public class TransactionEventConsumer {
                             .createdAt(LocalDateTime.now())
                             .build();
 
-            notificationRepository.save(notification);
+            try {
+                notificationRepository.save(notification);
 
-            System.out.println(
-                    "Notification saved for user: "
-                            + receiverUserId
-            );
+                log.info(
+                        "Notification created for transaction {} and user {}",
+                        transactionId,
+                        receiverUserId
+                );
 
-        } catch (Exception e) {
+            } catch (DataIntegrityViolationException ex) {
 
-            System.err.println(
-                    "Failed to process transaction event: "
-                            + e.getMessage()
+                // A concurrent consumer may have inserted the same notification.
+                // Verify that the unique constraint rejected a genuine duplicate.
+                boolean duplicateNowExists =
+                        notificationRepository
+                                .existsByTransactionIdAndUserIdAndType(
+                                        transactionId,
+                                        receiverUserId,
+                                        type
+                                );
+
+                if (duplicateNowExists) {
+                    log.info(
+                            "Concurrent duplicate notification skipped for transaction {}",
+                            transactionId
+                    );
+                    return;
+                }
+
+                // It was another database integrity problem.
+                throw ex;
+            }
+
+        } catch (Exception ex) {
+
+            log.error(
+                    "Failed to process transaction event",
+                    ex
             );
 
             throw new RuntimeException(
                     "Failed to process Kafka transaction event",
-                    e
+                    ex
             );
         }
     }

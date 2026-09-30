@@ -1,0 +1,162 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>VaultBank | User</title>
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/user.css">
+</head>
+
+<body>
+
+    <div class="dashboard">
+
+        <h1>VaultBank</h1>
+
+        <div class="top-bar">
+            <h2 id="welcomeMessage">Welcome, User</h2>
+            <button id="logoutButton" class="logout-button">Logout</button>
+        </div>
+
+        <!-- ACCOUNT BALANCE -->
+
+        <section class="dashboard-section">
+
+            <h2>My Account</h2>
+
+            <p>Account Balance</p>
+
+            <h1 id="accountBalance">₹ 0.00</h1>
+
+            <p>Account Status: Active</p>
+
+        </section>
+
+        <!-- SEND MONEY -->
+
+        <section class="dashboard-section">
+
+            <h2>Send Money</h2>
+
+            <form id="transferForm">
+
+                <label for="receiverId">Receiver User ID</label>
+                <input type="number" id="receiverId" min="1" placeholder="Enter receiver ID" required>
+
+                <label for="transferAmount">Amount (₹)</label>
+                <input type="number" id="transferAmount" min="0.01" step="0.01" placeholder="Enter amount" required>
+
+                <label for="description">Description</label>
+                <input type="text" id="description" placeholder="Enter description">
+
+                <button type="submit">Send Money</button>
+
+            </form>
+
+        </section>
+
+        <!-- TRANSACTION HISTORY -->
+
+        <section class="dashboard-section">
+
+            <h2>My Transactions</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Transaction ID</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+
+                <tbody id="transactionsTableBody">
+                    <tr>
+                        <td colspan="5">Transactions will appear here.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+        </section>
+
+        <!-- PROFILE -->
+
+        <section class="dashboard-section">
+
+            <h2>My Profile</h2>
+
+            <p>Username: <span id="username">-</span></p>
+            <p>User ID: <span id="userId">-</span></p>
+
+        </section>
+
+        <!-- PROFILE CHANGE REQUEST -->
+
+
+        <section class="dashboard-card profile-card">
+            <h2>Request Profile Change</h2>
+        
+            <form id="changeRequestForm">
+        
+                <label for="changeField">Select Field</label>
+        
+                <select id="changeField" required>
+                    <option value="">Select field</option>
+                    <option value="fullName">Full Name</option>
+                    <option value="email">Email</option>
+                    <option value="phone">Phone Number</option>
+                    <option value="address">Address</option>
+                </select>
+        
+                <label for="newValue">New Value</label>
+        
+                <input
+                    type="text"
+                    id="newValue"
+                    placeholder="Enter new value"
+                    maxlength="255"
+                    required
+                >
+        
+                <button type="submit">Submit Request</button>
+        
+                <p id="changeRequestMessage"></p>
+        
+            </form>
+        </section>
+        
+        <section class="dashboard-card profile-card">
+            <h2>My Change Requests</h2>
+        
+            <table>
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Old Value</th>
+                        <th>New Value</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+        
+                <tbody id="changeRequestsTableBody">
+                    <tr>
+                        <td colspan="5">Loading requests...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/user.js"></script>
+
+</body>
+</html>

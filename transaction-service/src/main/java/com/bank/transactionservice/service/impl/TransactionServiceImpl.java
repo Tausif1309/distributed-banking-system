@@ -60,7 +60,6 @@ public class TransactionServiceImpl
                 .map(this::toResponse)
                 .toList();
     }
-
     @Override
     @Transactional(
             noRollbackFor = AccountTransferException.class
@@ -70,63 +69,24 @@ public class TransactionServiceImpl
             TransferRequest request,
             String idempotencyKey) {
 
-        /*
-         * 1. Validate Idempotency-Key
-         */
-        if (idempotencyKey == null ||
-                idempotencyKey.isBlank()) {
-
+        // 1. Validate idempotency key
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new IllegalArgumentException(
                     "Idempotency-Key is required"
             );
         }
 
         if (idempotencyKey.length() > 100) {
-
             throw new IllegalArgumentException(
                     "Idempotency-Key cannot exceed 100 characters"
             );
         }
 
-
-        /*
-         * 2. Create Redis key
-         */
+        // 2. Create Redis keys
         String redisKey =
-                "idempotency:"
-                        + senderUserId
-                        + ":"
-                        + idempotencyKey;
+                "idempotency:" + senderUserId + ":" + idempotencyKey;
 
-
-        /*
-         * 3. Check Redis first
-         */
-        TransferResponse cachedResponse =
-                idempotencyService.get(redisKey);
-
-        if (cachedResponse != null) {
-
-            return cachedResponse;
-        }
-        boolean lockAcquired =
-                idempotencyService.acquireLock(redisKey);
-
-        if (!lockAcquired) {
-
-            throw new IllegalStateException(
-                    "A transfer with this Idempotency-Key is already being processed"
-            );
-        }
-
-
-        /*
-         * 4. Check MySQL
-         *
-         * Redis may have expired or may not contain
-         * the result, but the transaction could still
-         * exist in the database.
-         */
+        // 3. Check MySQL first: it is the source of truth
         Optional<BankTransaction> existingTransaction =
                 bankTransactionRepository
                         .findBySenderUserIdAndIdempotencyKey(
@@ -136,149 +96,157 @@ public class TransactionServiceImpl
 
         if (existingTransaction.isPresent()) {
 
-            TransferResponse response =
-                    toResponse(existingTransaction.get());
+            BankTransaction existing = existingTransaction.get();
 
-            /*
-             * Put the result back into Redis
-             */
-            idempotencyService.save(
-                    redisKey,
-                    response
-            );
+            if (!isSameRequest(existing, request)) {
+                throw new IllegalStateException(
+                        "Idempotency key was already used with different request details"
+                );
+            }
+
+            if (existing.getStatus() == TransactionStatus.PENDING) {
+                throw new IllegalStateException(
+                        "Transaction is still being processed"
+                );
+            }
+
+            TransferResponse response = toResponse(existing);
+
+            idempotencyService.save(redisKey, response);
 
             return response;
         }
 
+        // 4. Check Redis cache
+        TransferResponse cachedResponse =
+                idempotencyService.get(redisKey);
 
-        /*
-         * 5. Sender cannot transfer to himself
-         */
-        if (senderUserId.equals(
-                request.getReceiverUserId())) {
-
-            throw new IllegalArgumentException(
-                    "Sender and receiver cannot be the same"
+        if (cachedResponse != null) {
+            throw new IllegalStateException(
+                    "Cached result exists without a matching database transaction"
             );
         }
 
+        // 5. Acquire lock
+        String lockToken =
+                idempotencyService.acquireLock(redisKey);
 
-        /*
-         * 6. Generate unique transaction reference
-         */
-        String referenceId =
-                "TXN-" + UUID.randomUUID();
+        if (lockToken == null) {
+            throw new IllegalStateException(
+                    "A transfer with this Idempotency-Key is already being processed"
+            );
+        }
 
-
-        /*
-         * 7. Create PENDING transaction
-         */
-        BankTransaction transaction =
-                BankTransaction.builder()
-                        .senderUserId(senderUserId)
-                        .receiverUserId(
-                                request.getReceiverUserId()
-                        )
-                        .amount(request.getAmount())
-                        .currency("INR")
-                        .status(TransactionStatus.PENDING)
-                        .referenceId(referenceId)
-
-                        // IMPORTANT
-                        .idempotencyKey(idempotencyKey)
-
-                        .description(request.getDescription())
-                        .createdAt(LocalDateTime.now())
-                        .build();
-
-
-        transaction =
-                bankTransactionRepository.save(transaction);
-
-
-        /*
-         * 8. Ask User Service to move the money
-         */
         try {
 
-            accountServiceClient.transfer(
-                    senderUserId,
-                    request.getReceiverUserId(),
-                    request.getAmount()
-            );
+            // 6. Recheck MySQL after acquiring lock
+            existingTransaction =
+                    bankTransactionRepository
+                            .findBySenderUserIdAndIdempotencyKey(
+                                    senderUserId,
+                                    idempotencyKey
+                            );
 
-        } catch (AccountTransferException ex) {
+            if (existingTransaction.isPresent()) {
 
-            transaction.setStatus(
-                    TransactionStatus.FAILED
-            );
+                BankTransaction existing = existingTransaction.get();
 
-            transaction =
-                    bankTransactionRepository.save(transaction);
+                if (!isSameRequest(existing, request)) {
+                    throw new IllegalStateException(
+                            "Idempotency key was already used with different request details"
+                    );
+                }
 
-            /*
-             * Release Redis processing lock
-             * because the transfer failed.
-             */
-            idempotencyService.delete(redisKey);
+                if (existing.getStatus() == TransactionStatus.PENDING) {
+                    throw new IllegalStateException(
+                            "Transaction is still being processed"
+                    );
+                }
 
-            throw ex;
-        }
+                TransferResponse response = toResponse(existing);
 
-        /*
-         * 9. Account transfer succeeded
-         *    → mark transaction SUCCESS
-         */
-        transaction.setStatus(
-                TransactionStatus.SUCCESS
-        );
+                idempotencyService.save(redisKey, response);
 
-        transaction.setCompletedAt(
-                LocalDateTime.now()
-        );
+                return response;
+            }
 
+            // 7. Validate receiver
+            if (senderUserId.equals(request.getReceiverUserId())) {
+                throw new IllegalArgumentException(
+                        "Sender and receiver cannot be the same"
+                );
+            }
 
-        /*
-         * 10. Save SUCCESS transaction
-         */
-        transaction =
+            // 8. Create transaction
+            String referenceId = "TXN-" + UUID.randomUUID();
+
+            BankTransaction transaction =
+                    BankTransaction.builder()
+                            .senderUserId(senderUserId)
+                            .receiverUserId(request.getReceiverUserId())
+                            .amount(request.getAmount())
+                            .currency("INR")
+                            .status(TransactionStatus.PENDING)
+                            .referenceId(referenceId)
+                            .idempotencyKey(idempotencyKey)
+                            .description(request.getDescription())
+                            .createdAt(LocalDateTime.now())
+                            .build();
+
+            transaction = bankTransactionRepository.save(transaction);
+
+            // 9. Call User Service
+            try {
+
+                accountServiceClient.transfer(
+                        transaction.getReferenceId(),
+                        senderUserId,
+                        request.getReceiverUserId(),
+                        request.getAmount()
+                );
+
+            } catch (AccountTransferException ex) {
+
+                transaction.setStatus(TransactionStatus.FAILED);
+
                 bankTransactionRepository.save(transaction);
 
-        TransactionCompletedEvent event =
-                TransactionCompletedEvent.builder()
-                        .transactionId(transaction.getId())
-                        .referenceId(transaction.getReferenceId())
-                        .senderUserId(transaction.getSenderUserId())
-                        .receiverUserId(transaction.getReceiverUserId())
-                        .amount(transaction.getAmount())
-                        .currency(transaction.getCurrency())
-                        .description(transaction.getDescription())
-                        .eventType("TRANSACTION_COMPLETED")
-                        .build();
+                throw ex;
+            }
 
-        transactionEventProducer.publishTransactionCompleted(event);
+            // 10. Mark success
+            transaction.setStatus(TransactionStatus.SUCCESS);
+            transaction.setCompletedAt(LocalDateTime.now());
 
+            transaction = bankTransactionRepository.save(transaction);
 
-        /*
-         * 11. Convert entity → response
-         */
-        TransferResponse response =
-                toResponse(transaction);
+            // 11. Publish event
+            TransactionCompletedEvent event =
+                    TransactionCompletedEvent.builder()
+                            .transactionId(transaction.getId())
+                            .referenceId(transaction.getReferenceId())
+                            .senderUserId(transaction.getSenderUserId())
+                            .receiverUserId(transaction.getReceiverUserId())
+                            .amount(transaction.getAmount())
+                            .currency(transaction.getCurrency())
+                            .description(transaction.getDescription())
+                            .eventType("TRANSACTION_COMPLETED")
+                            .build();
 
+            transactionEventProducer.publishTransactionCompleted(event);
 
-        /*
-         * 12. Cache successful response in Redis
-         */
-        idempotencyService.save(
-                redisKey,
-                response
-        );
+            // 12. Cache response
+            TransferResponse response = toResponse(transaction);
 
+            idempotencyService.save(redisKey, response);
 
-        /*
-         * 13. Return response
-         */
-        return response;
+            return response;
+
+        } finally {
+
+            // Release only if this request still owns the lock
+            idempotencyService.releaseLock(redisKey, lockToken);
+        }
     }
 
     private TransferResponse toResponse(
@@ -297,5 +265,25 @@ public class TransactionServiceImpl
                     .completedAt(transaction.getCompletedAt())
                     .build();
 
+    }
+    private boolean isSameRequest(
+            BankTransaction transaction,
+            TransferRequest request) {
+
+        boolean sameReceiver =
+                transaction.getReceiverUserId()
+                        .equals(request.getReceiverUserId());
+
+        boolean sameAmount =
+                transaction.getAmount()
+                        .compareTo(request.getAmount()) == 0;
+
+        boolean sameDescription =
+                java.util.Objects.equals(
+                        transaction.getDescription(),
+                        request.getDescription()
+                );
+
+        return sameReceiver && sameAmount && sameDescription;
     }
 }

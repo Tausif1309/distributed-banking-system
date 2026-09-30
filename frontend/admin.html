@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>VaultBank | Admin</title>
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+
+<body>
+
+    <div class="dashboard">
+
+        <h1>VaultBank Admin</h1>
+
+        <div class="top-bar">
+            <h2>Welcome, Admin</h2>
+            <button id="logoutButton" class="logout-button">Logout</button>
+        </div>
+
+        <!-- CREATE USER -->
+
+        <section class="dashboard-section">
+
+            <h2>Create New User</h2>
+
+            <form id="createUserForm">
+
+                <label for="newName">Full Name</label>
+                <input type="text" id="newName" placeholder="Enter full name" required>
+
+                <label for="newUsername">Username</label>
+                <input type="text" id="newUsername" placeholder="Enter username" required>
+
+                <label for="newEmail">Email</label>
+                <input type="email" id="newEmail" placeholder="Enter email" required>
+
+                <label for="newPassword">Password</label>
+                <input type="password" id="newPassword" placeholder="Set password" required>
+
+                <label for="newPhone">Phone Number</label>
+                <input type="tel" id="newPhone" maxlength="10" placeholder="Enter 10-digit phone number" required>
+
+                <label for="newAddress">Address</label>
+                <input type="text" id="newAddress" placeholder="Enter address" required>
+
+                <label for="initialBalance">Initial Balance (₹)</label>
+                <input type="number" id="initialBalance" min="0" step="0.01" placeholder="Enter initial balance" required>
+
+                <p id="createUserMessage"></p>
+                <button type="submit">Create User</button>
+
+            </form>
+
+        </section>
+
+        <!-- USERS -->
+
+<!-- USERS -->
+
+<section class="dashboard-section">
+
+    <h2>All Users</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Full Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+
+        <tbody id="usersTableBody">
+            <tr>
+                <td colspan="5">Loading users...</td>
+            </tr>
+        </tbody>
+    </table>
+
+</section>
+
+        <!-- TRANSACTIONS -->
+
+        <section class="dashboard-section">
+
+            <h2>Transaction History</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Reference</th>
+                        <th>Sender ID</th>
+                        <th>Receiver ID</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody id="transactionsTableBody">
+                    <tr>
+                        <td colspan="5">Transactions will appear here.</td>
+                    </tr>
+                </tbody>
+            </table>
+
+        </section>
+
+        <!-- CHANGE REQUESTS -->
+
+ 
+<!-- CHANGE REQUESTS -->
+
+<section class="dashboard-section">
+
+    <h2>Profile Change Requests</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Request ID</th>
+                <th>User ID</th>
+                <th>Field</th>
+                <th>Old Value</th>
+                <th>New Value</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+
+        <tbody id="requestsTableBody">
+            <tr>
+                <td colspan="7">Loading requests...</td>
+            </tr>
+        </tbody>
+    </table>
+
+</section>
+
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/admin.js"></script>
+
+</body>
+</html>

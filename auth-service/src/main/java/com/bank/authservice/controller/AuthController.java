@@ -2,6 +2,7 @@ package com.bank.authservice.controller;
 
 import com.bank.authservice.dto.request.CreateCredentialRequest;
 import com.bank.authservice.dto.request.LoginRequest;
+import com.bank.authservice.dto.request.UpdateCredentialStatusRequest;
 import com.bank.authservice.dto.response.LoginResponse;
 import com.bank.authservice.service.AuthService;
 import jakarta.validation.Valid;
@@ -35,5 +36,19 @@ public class AuthController {
         authService.createCredential(request);
 
         return ResponseEntity.status(HttpStatus.CREATED).build();
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/credentials/{userId}/status")
+    public ResponseEntity<Void> updateCredentialStatus(
+            @PathVariable Long userId,
+            @Valid @RequestBody UpdateCredentialStatusRequest request) {
+
+        authService.updateCredentialStatus(
+                userId,
+                request.getStatus()
+        );
+
+        return ResponseEntity.noContent().build();
     }
 }

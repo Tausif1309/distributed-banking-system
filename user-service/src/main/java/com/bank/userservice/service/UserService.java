@@ -15,4 +15,8 @@ public interface UserService {
     List<UserResponse> getAllUsers();
 
     UserResponse updateUser(Long userId, UpdateUserRequest request);
+
+    UserResponse deactivateUser(Long userId);
+
+    UserResponse activateUser(Long userId);
 }
