@@ -5,40 +5,38 @@ A microservices-based banking application built with Java and Spring Boot, provi
 # Distributed Banking System
 
 A microservices-based banking application built with Java and Spring Boot, providing secure authentication, user and account management, money transfers, and event-driven notifications.
-
-## Architecture
+## Architecture overview
 
 ```mermaid
 flowchart LR
-    Client[Web Frontend]
-
-    Auth[Auth Service]
-    User[User Service]
-    Transaction[Transaction Service]
-    Notification[Notification Service]
-
-    AuthDB[(Auth MySQL)]
-    UserDB[(User MySQL)]
-    TransactionDB[(Transaction MySQL)]
-    NotificationDB[(Notification MySQL)]
-
+    Browser[Vanilla JS frontend]
+    Auth[Auth Service\n8081]
+    User[User Service\n8082]
+    Tx[Transaction Service\n8083]
+    Notify[Notification Service\n8084]
+    AuthDB[(Auth MySQL database)]
+    UserDB[(User MySQL database)]
+    TxDB[(Transaction MySQL database)]
+    NotifyDB[(Notification MySQL database)]
     Redis[(Redis)]
-    Kafka[(Apache Kafka)]
+    Kafka[(Kafka)]
 
-    Client -->|Login| Auth
-    Client -->|Users & Accounts| User
-    Client -->|Transfers & History| Transaction
-    Client -->|Notifications| Notification
-
+    Browser -->|Login and JWT| Auth
+    Browser -->|Profiles and accounts| User
+    Browser -->|Transfers and history| Tx
+    Browser -->|Notifications| Notify
     Auth --> AuthDB
     User --> UserDB
-    Transaction --> TransactionDB
-    Notification --> NotificationDB
+    Tx --> TxDB
+    Notify --> NotifyDB
+    Tx -->|Account transfer request| User
+    Tx -->|Idempotency support| Redis
+    Tx -->|Completed-transfer event| Kafka
+    Kafka --> Notify
+```
 
-    Transaction -->|Transfer Request| User
-    Transaction -->|Idempotency| Redis
-    Transaction -->|Transaction Event| Kafka
-    Kafka --> Notification
+The browser calls the services directly using the configured local URLs. There is no API Gateway in the current project. Docker Compose provides the local infrastructure configuration; application services are run separately.
+
 
 ## Features
 
