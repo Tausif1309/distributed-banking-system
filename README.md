@@ -35,7 +35,6 @@ flowchart LR
     Kafka --> Notify
 ```
 
-The browser calls the services directly using the configured local URLs. There is no API Gateway in the current project. Docker Compose provides the local infrastructure configuration; application services are run separately.
 
 
 ## Features
