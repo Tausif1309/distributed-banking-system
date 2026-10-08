@@ -2,6 +2,44 @@
 
 A microservices-based banking application built with Java and Spring Boot, providing secure authentication, user and account management, money transfers, and event-driven notifications.
 
+# Distributed Banking System
+
+A microservices-based banking application built with Java and Spring Boot, providing secure authentication, user and account management, money transfers, and event-driven notifications.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Client[Web Frontend]
+
+    Auth[Auth Service]
+    User[User Service]
+    Transaction[Transaction Service]
+    Notification[Notification Service]
+
+    AuthDB[(Auth MySQL)]
+    UserDB[(User MySQL)]
+    TransactionDB[(Transaction MySQL)]
+    NotificationDB[(Notification MySQL)]
+
+    Redis[(Redis)]
+    Kafka[(Apache Kafka)]
+
+    Client -->|Login| Auth
+    Client -->|Users & Accounts| User
+    Client -->|Transfers & History| Transaction
+    Client -->|Notifications| Notification
+
+    Auth --> AuthDB
+    User --> UserDB
+    Transaction --> TransactionDB
+    Notification --> NotificationDB
+
+    Transaction -->|Transfer Request| User
+    Transaction -->|Idempotency| Redis
+    Transaction -->|Transaction Event| Kafka
+    Kafka --> Notification
+
 ## Features
 
 - JWT-based authentication and role-based access control (ADMIN/USER) using Spring Security and BCrypt.
