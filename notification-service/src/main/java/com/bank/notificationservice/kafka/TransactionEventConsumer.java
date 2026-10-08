@@ -34,6 +34,16 @@ public class TransactionEventConsumer {
                             TransactionCompletedEvent.class
                     );
 
+            // The transaction producer emits this event only after storing
+            // a successful transfer. Other event types must not notify users.
+            if (!"TRANSACTION_COMPLETED".equals(event.getEventType())) {
+                log.info(
+                        "Ignoring non-completed transaction event {}",
+                        event.getEventType()
+                );
+                return;
+            }
+
             if (event.getTransactionId() == null
                     || event.getReceiverUserId() == null
                     || event.getSenderUserId() == null
@@ -46,76 +56,45 @@ public class TransactionEventConsumer {
                 );
             }
 
+            if (event.getTransactionId() <= 0
+                    || event.getReceiverUserId() <= 0
+                    || event.getSenderUserId() <= 0
+                    || event.getAmount().signum() <= 0
+                    || event.getCurrency().isBlank()
+                    || event.getReferenceId().isBlank()) {
+                throw new IllegalArgumentException(
+                        "Transaction event contains invalid required fields"
+                );
+            }
+
             Long transactionId = event.getTransactionId();
             Long receiverUserId = event.getReceiverUserId();
-            String type = "MONEY_RECEIVED";
 
-            boolean alreadyExists =
-                    notificationRepository
-                            .existsByTransactionIdAndUserIdAndType(
-                                    transactionId,
-                                    receiverUserId,
-                                    type
-                            );
+            createNotification(
+                    transactionId,
+                    receiverUserId,
+                    "MONEY_RECEIVED",
+                    "Money Received",
+                    "You received "
+                            + event.getCurrency()
+                            + " "
+                            + event.getAmount()
+                            + " from user "
+                            + event.getSenderUserId()
+            );
 
-            if (alreadyExists) {
-                log.info(
-                        "Duplicate notification skipped for transaction {}",
-                        transactionId
-                );
-                return;
-            }
-
-            Notification notification =
-                    Notification.builder()
-                            .userId(receiverUserId)
-                            .transactionId(transactionId)
-                            .type(type)
-                            .title("Money Received")
-                            .message(
-                                    "You received "
-                                            + event.getCurrency()
-                                            + " "
-                                            + event.getAmount()
-                                            + " from user "
-                                            + event.getSenderUserId()
-                            )
-                            .read(false)
-                            .createdAt(LocalDateTime.now())
-                            .build();
-
-            try {
-                notificationRepository.save(notification);
-
-                log.info(
-                        "Notification created for transaction {} and user {}",
-                        transactionId,
-                        receiverUserId
-                );
-
-            } catch (DataIntegrityViolationException ex) {
-
-                // A concurrent consumer may have inserted the same notification.
-                // Verify that the unique constraint rejected a genuine duplicate.
-                boolean duplicateNowExists =
-                        notificationRepository
-                                .existsByTransactionIdAndUserIdAndType(
-                                        transactionId,
-                                        receiverUserId,
-                                        type
-                                );
-
-                if (duplicateNowExists) {
-                    log.info(
-                            "Concurrent duplicate notification skipped for transaction {}",
-                            transactionId
-                    );
-                    return;
-                }
-
-                // It was another database integrity problem.
-                throw ex;
-            }
+            createNotification(
+                    transactionId,
+                    event.getSenderUserId(),
+                    "MONEY_SENT",
+                    "Money Sent",
+                    "You sent "
+                            + event.getCurrency()
+                            + " "
+                            + event.getAmount()
+                            + " to user "
+                            + receiverUserId
+            );
 
         } catch (Exception ex) {
 
@@ -129,5 +108,67 @@ public class TransactionEventConsumer {
                     ex
             );
         }
+    }
+
+    private void createNotification(
+            Long transactionId,
+            Long userId,
+            String type,
+            String title,
+            String message) {
+
+        if (notificationRepository
+                .existsByTransactionIdAndUserIdAndType(
+                        transactionId,
+                        userId,
+                        type
+                )) {
+            log.info(
+                    "Duplicate {} notification skipped for transaction {} and user {}",
+                    type,
+                    transactionId,
+                    userId
+            );
+            return;
+        }
+
+        Notification notification = Notification.builder()
+                .userId(userId)
+                .transactionId(transactionId)
+                .type(type)
+                .title(title)
+                .message(message)
+                .read(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        try {
+            notificationRepository.save(notification);
+        } catch (DataIntegrityViolationException ex) {
+            // The database unique constraint is the final guard if two
+            // consumers race after both pass the existence check.
+            if (notificationRepository
+                    .existsByTransactionIdAndUserIdAndType(
+                            transactionId,
+                            userId,
+                            type
+                    )) {
+                log.info(
+                        "Concurrent duplicate {} notification skipped for transaction {}",
+                        type,
+                        transactionId
+                );
+                return;
+            }
+
+            throw ex;
+        }
+
+        log.info(
+                "{} notification created for transaction {} and user {}",
+                type,
+                transactionId,
+                userId
+        );
     }
 }

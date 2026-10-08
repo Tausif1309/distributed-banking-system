@@ -2,8 +2,8 @@ package com.bank.transactionservice.service.impl;
 
 import com.bank.transactionservice.client.AccountServiceClient;
 import com.bank.transactionservice.dto.event.TransactionCompletedEvent;
+import com.bank.transactionservice.dto.internal.AccountTransferResponse;
 import com.bank.transactionservice.dto.request.TransferRequest;
-import com.bank.transactionservice.dto.response.IdempotencyResponse;
 import com.bank.transactionservice.dto.response.TransferResponse;
 import com.bank.transactionservice.entity.BankTransaction;
 import com.bank.transactionservice.entity.TransactionStatus;
@@ -13,6 +13,8 @@ import com.bank.transactionservice.repository.BankTransactionRepository;
 import com.bank.transactionservice.service.IdempotencyService;
 import com.bank.transactionservice.service.TransactionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -20,11 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TransactionServiceImpl
         implements TransactionService {
 
@@ -61,9 +65,6 @@ public class TransactionServiceImpl
                 .toList();
     }
     @Override
-    @Transactional(
-            noRollbackFor = AccountTransferException.class
-    )
     public TransferResponse transfer(
             Long senderUserId,
             TransferRequest request,
@@ -82,11 +83,17 @@ public class TransactionServiceImpl
             );
         }
 
-        // 2. Create Redis keys
+        if (senderUserId.equals(request.getReceiverUserId())) {
+            throw new IllegalArgumentException(
+                    "Sender and receiver cannot be the same"
+            );
+        }
+
+        // 2. Create Redis key
         String redisKey =
                 "idempotency:" + senderUserId + ":" + idempotencyKey;
 
-        // 3. Check MySQL first: it is the source of truth
+        // The transaction database is the durable source of truth.
         Optional<BankTransaction> existingTransaction =
                 bankTransactionRepository
                         .findBySenderUserIdAndIdempotencyKey(
@@ -95,39 +102,25 @@ public class TransactionServiceImpl
                         );
 
         if (existingTransaction.isPresent()) {
-
             BankTransaction existing = existingTransaction.get();
+            validateSameRequest(existing, request);
 
-            if (!isSameRequest(existing, request)) {
-                throw new IllegalStateException(
-                        "Idempotency key was already used with different request details"
-                );
+            if (existing.getStatus() != TransactionStatus.PENDING) {
+                return returnStoredResult(redisKey, existing);
             }
-
-            if (existing.getStatus() == TransactionStatus.PENDING) {
-                throw new IllegalStateException(
-                        "Transaction is still being processed"
-                );
-            }
-
-            TransferResponse response = toResponse(existing);
-
-            idempotencyService.save(redisKey, response);
-
-            return response;
         }
 
-        // 4. Check Redis cache
-        TransferResponse cachedResponse =
-                idempotencyService.get(redisKey);
-
-        if (cachedResponse != null) {
+        // Redis is only a response cache. Never let a cache-only result
+        // authorize a transfer when the durable transaction row is missing.
+        if (existingTransaction.isEmpty()
+                && idempotencyService.get(redisKey) != null) {
             throw new IllegalStateException(
                     "Cached result exists without a matching database transaction"
             );
         }
 
-        // 5. Acquire lock
+        // Serialize same-key processing. The database uniqueness constraint
+        // remains the final guard if the Redis lease expires.
         String lockToken =
                 idempotencyService.acquireLock(redisKey);
 
@@ -138,8 +131,8 @@ public class TransactionServiceImpl
         }
 
         try {
-
-            // 6. Recheck MySQL after acquiring lock
+            // Recheck after taking the lock. This also recovers a durable
+            // PENDING row left by a timeout or process failure.
             existingTransaction =
                     bankTransactionRepository
                             .findBySenderUserIdAndIdempotencyKey(
@@ -148,36 +141,23 @@ public class TransactionServiceImpl
                             );
 
             if (existingTransaction.isPresent()) {
-
                 BankTransaction existing = existingTransaction.get();
+                validateSameRequest(existing, request);
 
-                if (!isSameRequest(existing, request)) {
-                    throw new IllegalStateException(
-                            "Idempotency key was already used with different request details"
-                    );
+                if (existing.getStatus() != TransactionStatus.PENDING) {
+                    return returnStoredResult(redisKey, existing);
                 }
 
-                if (existing.getStatus() == TransactionStatus.PENDING) {
-                    throw new IllegalStateException(
-                            "Transaction is still being processed"
-                    );
-                }
-
-                TransferResponse response = toResponse(existing);
-
-                idempotencyService.save(redisKey, response);
-
-                return response;
-            }
-
-            // 7. Validate receiver
-            if (senderUserId.equals(request.getReceiverUserId())) {
-                throw new IllegalArgumentException(
-                        "Sender and receiver cannot be the same"
+                return completePendingTransfer(
+                        existing,
+                        request,
+                        redisKey
                 );
             }
 
-            // 8. Create transaction
+            // Save PENDING in its own repository transaction. Since this
+            // method is not @Transactional, save() commits before the remote
+            // account call begins.
             String referenceId = "TXN-" + UUID.randomUUID();
 
             BankTransaction transaction =
@@ -193,59 +173,184 @@ public class TransactionServiceImpl
                             .createdAt(LocalDateTime.now())
                             .build();
 
-            transaction = bankTransactionRepository.save(transaction);
-
-            // 9. Call User Service
             try {
+                transaction = bankTransactionRepository.save(transaction);
+            } catch (DataIntegrityViolationException duplicateKey) {
+                // Another request may have committed this idempotency key
+                // while our Redis lease was expiring. Reuse its reference.
+                Optional<BankTransaction> winner =
+                        bankTransactionRepository
+                                .findBySenderUserIdAndIdempotencyKey(
+                                        senderUserId,
+                                        idempotencyKey
+                                );
 
-                accountServiceClient.transfer(
-                        transaction.getReferenceId(),
-                        senderUserId,
-                        request.getReceiverUserId(),
-                        request.getAmount()
-                );
+                if (winner.isEmpty()) {
+                    throw duplicateKey;
+                }
 
-            } catch (AccountTransferException ex) {
+                transaction = winner.get();
+                validateSameRequest(transaction, request);
 
-                transaction.setStatus(TransactionStatus.FAILED);
-
-                bankTransactionRepository.save(transaction);
-
-                throw ex;
+                if (transaction.getStatus() != TransactionStatus.PENDING) {
+                    return returnStoredResult(redisKey, transaction);
+                }
             }
 
-            // 10. Mark success
-            transaction.setStatus(TransactionStatus.SUCCESS);
-            transaction.setCompletedAt(LocalDateTime.now());
-
-            transaction = bankTransactionRepository.save(transaction);
-
-            // 11. Publish event
-            TransactionCompletedEvent event =
-                    TransactionCompletedEvent.builder()
-                            .transactionId(transaction.getId())
-                            .referenceId(transaction.getReferenceId())
-                            .senderUserId(transaction.getSenderUserId())
-                            .receiverUserId(transaction.getReceiverUserId())
-                            .amount(transaction.getAmount())
-                            .currency(transaction.getCurrency())
-                            .description(transaction.getDescription())
-                            .eventType("TRANSACTION_COMPLETED")
-                            .build();
-
-            transactionEventProducer.publishTransactionCompleted(event);
-
-            // 12. Cache response
-            TransferResponse response = toResponse(transaction);
-
-            idempotencyService.save(redisKey, response);
-
-            return response;
+            return completePendingTransfer(
+                    transaction,
+                    request,
+                    redisKey
+            );
 
         } finally {
+            // A Redis outage after the durable transaction completed must not
+            // turn a successful transfer into an apparent failure.
+            try {
+                idempotencyService.releaseLock(redisKey, lockToken);
+            } catch (RuntimeException ex) {
+                log.warn(
+                        "Could not release idempotency lock for key {}",
+                        redisKey,
+                        ex
+                );
+            }
+        }
+    }
 
-            // Release only if this request still owns the lock
-            idempotencyService.releaseLock(redisKey, lockToken);
+    private TransferResponse completePendingTransfer(
+            BankTransaction transaction,
+            TransferRequest request,
+            String redisKey) {
+
+        try {
+            AccountTransferResponse accountResponse =
+                    accountServiceClient.transfer(
+                            transaction.getReferenceId(),
+                            transaction.getSenderUserId(),
+                            transaction.getReceiverUserId(),
+                            transaction.getAmount()
+                    );
+
+            validateAccountTransferResponse(transaction, accountResponse);
+
+        } catch (AccountTransferException ex) {
+            if (ex.isDefinitiveRejection()) {
+                transaction.setStatus(TransactionStatus.FAILED);
+                bankTransactionRepository.save(transaction);
+            }
+
+            // Network errors and 5xx responses leave the committed row
+            // PENDING. A retry will call User Service with this same reference.
+            throw ex;
+        }
+
+        transaction.setStatus(TransactionStatus.SUCCESS);
+        transaction.setCompletedAt(LocalDateTime.now());
+
+        // Commit SUCCESS before attempting Kafka. Kafka is not part of the
+        // financial result and cannot roll this database update back.
+        BankTransaction completed =
+                bankTransactionRepository.save(transaction);
+
+        publishCompletionEventBestEffort(completed);
+
+        TransferResponse response = toResponse(completed);
+        cacheResponseBestEffort(redisKey, response);
+
+        return response;
+    }
+
+    private void validateAccountTransferResponse(
+            BankTransaction transaction,
+            AccountTransferResponse response) {
+
+        boolean valid = response != null
+                && Objects.equals(
+                        transaction.getReferenceId(),
+                        response.getTransferReference()
+                )
+                && Objects.equals(
+                        transaction.getSenderUserId(),
+                        response.getSenderUserId()
+                )
+                && Objects.equals(
+                        transaction.getReceiverUserId(),
+                        response.getReceiverUserId()
+                )
+                && response.getSenderBalance() != null
+                && response.getReceiverBalance() != null
+                && Objects.equals(
+                        transaction.getCurrency(),
+                        response.getCurrency()
+                );
+
+        if (!valid) {
+            throw new AccountTransferException(
+                    "Account service returned an incomplete or mismatched transfer result",
+                    new IllegalStateException("Transfer result could not be verified")
+            );
+        }
+    }
+
+    private void publishCompletionEventBestEffort(
+            BankTransaction transaction) {
+
+        TransactionCompletedEvent event =
+                TransactionCompletedEvent.builder()
+                        .transactionId(transaction.getId())
+                        .referenceId(transaction.getReferenceId())
+                        .senderUserId(transaction.getSenderUserId())
+                        .receiverUserId(transaction.getReceiverUserId())
+                        .amount(transaction.getAmount())
+                        .currency(transaction.getCurrency())
+                        .description(transaction.getDescription())
+                        .eventType("TRANSACTION_COMPLETED")
+                        .build();
+
+        try {
+            transactionEventProducer.publishTransactionCompleted(event);
+        } catch (RuntimeException ex) {
+            log.error(
+                    "Transfer {} completed, but its Kafka notification event could not be published",
+                    transaction.getReferenceId(),
+                    ex
+            );
+        }
+    }
+
+    private TransferResponse returnStoredResult(
+            String redisKey,
+            BankTransaction transaction) {
+
+        TransferResponse response = toResponse(transaction);
+        cacheResponseBestEffort(redisKey, response);
+        return response;
+    }
+
+    private void cacheResponseBestEffort(
+            String redisKey,
+            TransferResponse response) {
+
+        try {
+            idempotencyService.save(redisKey, response);
+        } catch (RuntimeException ex) {
+            log.warn(
+                    "Could not cache transfer response for idempotency key {}",
+                    redisKey,
+                    ex
+            );
+        }
+    }
+
+    private void validateSameRequest(
+            BankTransaction transaction,
+            TransferRequest request) {
+
+        if (!isSameRequest(transaction, request)) {
+            throw new IllegalStateException(
+                    "Idempotency key was already used with different request details"
+            );
         }
     }
 

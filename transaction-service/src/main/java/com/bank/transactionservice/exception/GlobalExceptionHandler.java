@@ -19,17 +19,26 @@ public class GlobalExceptionHandler {
             AccountTransferException ex,
             HttpServletRequest request) {
 
+        boolean definitiveRejection = ex.isDefinitiveRejection();
+        HttpStatus status = definitiveRejection
+                ? HttpStatus.CONFLICT
+                : HttpStatus.SERVICE_UNAVAILABLE;
+
         ErrorResponse response =
                 new ErrorResponse(
                         LocalDateTime.now(),
-                        HttpStatus.CONFLICT.value(),
-                        "Transfer Failed",
-                        ex.getMessage(),
+                        status.value(),
+                        definitiveRejection
+                                ? "Transfer Rejected"
+                                : "Transfer Outcome Unknown",
+                        definitiveRejection
+                                ? "The account service rejected the transfer; no account movement was applied."
+                                : "The transfer outcome is uncertain. Retry the same request with the same Idempotency-Key.",
                         request.getRequestURI()
                 );
 
         return ResponseEntity
-                .status(HttpStatus.CONFLICT)
+                .status(status)
                 .body(response);
     }
 

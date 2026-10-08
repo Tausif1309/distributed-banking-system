@@ -28,11 +28,14 @@
 
             <h2>My Account</h2>
 
+            <p>Account ID: <span id="accountId">Loading...</span></p>
             <p>Account Balance</p>
 
-            <h1 id="accountBalance">₹ 0.00</h1>
+            <h1 id="accountBalance">Loading...</h1>
 
-            <p>Account Status: Active</p>
+            <p>Currency: <span id="accountCurrency">Loading...</span></p>
+            <p>Account Status: <span id="accountStatus">Loading...</span></p>
+            <p id="accountMessage" role="status" aria-live="polite"></p>
 
         </section>
 
@@ -45,17 +48,19 @@
             <form id="transferForm">
 
                 <label for="receiverId">Receiver User ID</label>
-                <input type="number" id="receiverId" min="1" placeholder="Enter receiver ID" required>
+                <input type="number" id="receiverId" name="receiverUserId" min="1" step="1" placeholder="Enter receiver ID" required>
 
                 <label for="transferAmount">Amount (₹)</label>
-                <input type="number" id="transferAmount" min="0.01" step="0.01" placeholder="Enter amount" required>
+                <input type="number" id="transferAmount" name="amount" min="0.01" step="0.01" placeholder="Enter amount" required>
 
                 <label for="description">Description</label>
-                <input type="text" id="description" placeholder="Enter description">
+                <input type="text" id="description" name="description" maxlength="255" placeholder="Enter description">
 
-                <button type="submit">Send Money</button>
+                <button type="submit" id="transferSubmitButton">Send Money</button>
 
             </form>
+            <p id="transferMessage" role="status" aria-live="polite"></p>
+            <button type="button" id="newTransferButton" hidden>Start a new transfer</button>
 
         </section>
 
@@ -85,14 +90,41 @@
 
         </section>
 
+        <!-- NOTIFICATIONS -->
+
+        <section class="dashboard-section" id="notificationsSection">
+            <div class="notification-heading">
+                <h2>Notifications <span id="notificationUnreadCount" class="notification-badge">0</span></h2>
+                <button type="button" id="toggleNotificationsButton" aria-expanded="false">
+                    Open notifications
+                </button>
+            </div>
+
+            <div id="notificationsPanel" hidden>
+                <p id="notificationMessage" role="status" aria-live="polite">
+                    Open this section to load your notifications.
+                </p>
+                <button type="button" id="markAllNotificationsReadButton" disabled>
+                    Mark all as read
+                </button>
+                <ul id="notificationsList" class="notification-list"></ul>
+            </div>
+        </section>
+
         <!-- PROFILE -->
 
         <section class="dashboard-section">
 
-            <h2>My Profile</h2>
+            <h2>Personal Information</h2>
 
             <p>Username: <span id="username">-</span></p>
             <p>User ID: <span id="userId">-</span></p>
+            <p>Full Name: <span id="profileFullName">Loading...</span></p>
+            <p>Email: <span id="profileEmail">Loading...</span></p>
+            <p>Phone: <span id="profilePhone">Loading...</span></p>
+            <p>Address: <span id="profileAddress">Loading...</span></p>
+            <p>User Status: <span id="profileStatus">Loading...</span></p>
+            <p id="profileMessage" role="status" aria-live="polite"></p>
 
         </section>
 
