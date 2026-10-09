@@ -1,10 +1,6 @@
 # Distributed Banking System
 
 A microservices-based banking application built with Java and Spring Boot, providing secure authentication, user and account management, money transfers, and event-driven notifications.
-
-# Distributed Banking System
-
-A microservices-based banking application built with Java and Spring Boot, providing secure authentication, user and account management, money transfers, and event-driven notifications.
 ## Architecture overview
 
 ```mermaid
