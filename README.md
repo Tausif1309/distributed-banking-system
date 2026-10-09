@@ -59,7 +59,7 @@ flowchart LR
 
 **Messaging:** Apache Kafka
 
-**Caching & Idempotency:** Redis
+**Idempotency:** Redis
 
 **Authentication:** JWT, BCrypt
 
